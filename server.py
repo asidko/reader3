@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -26,6 +26,15 @@ BOOKS_DIR = "."
 # Get Claude Code status once at startup
 CLAUDE_CODE_STATUS = get_claude_code_status()
 
+def _get_available_books() -> list[str]:
+    """Get list of all available book folders."""
+    books = []
+    if os.path.exists(BOOKS_DIR):
+        for item in os.listdir(BOOKS_DIR):
+            if item.endswith("_data") and os.path.isdir(item):
+                books.append(item)
+    return books
+
 @lru_cache(maxsize=10)
 def load_book_cached(folder_name: str) -> Optional[Book]:
     """
@@ -46,32 +55,35 @@ def load_book_cached(folder_name: str) -> Optional[Book]:
 
 @app.get("/", response_class=HTMLResponse)
 async def library_view(request: Request):
-    """Lists all available processed books."""
+    """Root endpoint - shows library or redirects to single book."""
+    available_books = _get_available_books()
+
+    # If only one book, redirect straight to it
+    if len(available_books) == 1:
+        return RedirectResponse(url=f"/read/{available_books[0]}", status_code=303)
+
     books = []
 
-    # Scan directory for folders ending in '_data' that have a book.pkl
-    if os.path.exists(BOOKS_DIR):
-        for item in os.listdir(BOOKS_DIR):
-            if item.endswith("_data") and os.path.isdir(item):
-                # Try to load it to get the title
-                book = load_book_cached(item)
-                if book:
-                    # Get first 1000 chars of content for summary
-                    content_sample = book.spine[0].content[:1000] if book.spine else ""
-                    summary = get_book_summary(
-                        item,
-                        book.metadata.title,
-                        ", ".join(book.metadata.authors),
-                        content_sample
-                    )
+    # Load and display all available books
+    for item in available_books:
+        book = load_book_cached(item)
+        if book:
+            # Get first 1000 chars of content for summary
+            content_sample = book.spine[0].content[:1000] if book.spine else ""
+            summary = get_book_summary(
+                item,
+                book.metadata.title,
+                ", ".join(book.metadata.authors),
+                content_sample
+            )
 
-                    books.append({
-                        "id": item,
-                        "title": book.metadata.title,
-                        "author": ", ".join(book.metadata.authors),
-                        "chapters": len(book.spine),
-                        "summary": summary
-                    })
+            books.append({
+                "id": item,
+                "title": book.metadata.title,
+                "author": ", ".join(book.metadata.authors),
+                "chapters": len(book.spine),
+                "summary": summary
+            })
 
     return templates.TemplateResponse(
         "library.html",
