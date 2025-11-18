@@ -63,11 +63,11 @@ def get_book_summary(book_id: str, title: str, author: str, content_sample: str)
 
     # Fetch from Claude CLI
     try:
-        prompt = f"""Write an engaging, intriguing one-paragraph summary of this book (3-4 sentences). The summary should:
-- Hook the reader with what makes the book interesting
-- Briefly describe the main plot/topic and protagonist
-- Hint at the core conflict or central theme
-- Be elegant and literary in tone
+        prompt = f"""Write a SHORT, punchy one-sentence summary that makes someone want to read immediately. It should be:
+- Intriguing and mysterious (what's the hook?)
+- Quick to read (10-20 words max)
+- Focus on what makes this book unmissable
+- Be vivid and compelling
 
 Book: {title} by {author}
 
