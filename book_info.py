@@ -269,7 +269,7 @@ def _split_into_paragraph_groups(content: str, min_length: int = 500, max_groups
 
 
 def _get_paragraph_group_summary(group_text: str, book_title: str = "", book_author: str = "") -> Optional[str]:
-    """Get an intriguing 2-4 word teaser for a paragraph group (shown before reading).
+    """Get an intriguing 2-6 word teaser for a paragraph group (shown before reading).
 
     Args:
         group_text: HTML text to summarize
@@ -301,14 +301,14 @@ def _get_paragraph_group_summary(group_text: str, book_title: str = "", book_aut
         context = f"Book by {book_author}\n\n"
 
     # Build prompt for intriguing teaser
-    prompt = f"""Create an intriguing 2-4 word teaser that makes someone curious to read this section.
+    prompt = f"""Create an intriguing 2-6 word teaser that makes someone curious to read this section.
 Use vivid verbs, tension, or mystery. Make it a hook, not just a summary.
 No punctuation. Just key words.
 
 {context}Passage:
 {clean_text[:400]}
 
-ONLY the 2-4 words, nothing else."""
+ONLY the 2-6 words, nothing else."""
 
     result = _fetch_from_claude(prompt)
     if result:
