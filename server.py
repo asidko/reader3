@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -26,16 +26,7 @@ BOOKS_DIR = "."
 # Get Claude Code status once at startup
 CLAUDE_CODE_STATUS = get_claude_code_status()
 
-def _get_available_books() -> list[str]:
-    """Get list of all available book folders."""
-    books = []
-    if os.path.exists(BOOKS_DIR):
-        for item in os.listdir(BOOKS_DIR):
-            if item.endswith("_data") and os.path.isdir(item):
-                books.append(item)
-    return books
-
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=1)
 def load_book_cached(folder_name: str) -> Optional[Book]:
     """
     Loads the book from the pickle file.
@@ -53,46 +44,22 @@ def load_book_cached(folder_name: str) -> Optional[Book]:
         print(f"Error loading book {folder_name}: {e}")
         return None
 
+def _get_book_folder() -> Optional[str]:
+    """Get the single book folder. Returns None if not found or multiple exist."""
+    if os.path.exists(BOOKS_DIR):
+        books = [item for item in os.listdir(BOOKS_DIR)
+                 if item.endswith("_data") and os.path.isdir(item)]
+        if len(books) == 1:
+            return books[0]
+    return None
+
 @app.get("/", response_class=HTMLResponse)
-async def library_view(request: Request):
-    """Root endpoint - shows library or redirects to single book."""
-    available_books = _get_available_books()
-
-    # If only one book, redirect straight to it
-    if len(available_books) == 1:
-        return RedirectResponse(url=f"/read/{available_books[0]}", status_code=303)
-
-    books = []
-
-    # Load and display all available books
-    for item in available_books:
-        book = load_book_cached(item)
-        if book:
-            # Get first 1000 chars of content for summary
-            content_sample = book.spine[0].content[:1000] if book.spine else ""
-            summary = get_book_summary(
-                item,
-                book.metadata.title,
-                ", ".join(book.metadata.authors),
-                content_sample
-            )
-
-            books.append({
-                "id": item,
-                "title": book.metadata.title,
-                "author": ", ".join(book.metadata.authors),
-                "chapters": len(book.spine),
-                "summary": summary
-            })
-
-    return templates.TemplateResponse(
-        "library.html",
-        {
-            "request": request,
-            "books": books,
-            "claude_code_enabled": CLAUDE_CODE_STATUS["enabled"]
-        }
-    )
+async def root(request: Request):
+    """Root endpoint - redirect to the book."""
+    book_folder = _get_book_folder()
+    if not book_folder:
+        raise HTTPException(status_code=404, detail="No book found. Run: uv run reader3.py <book.epub>")
+    return await read_chapter(request=request, book_id=book_folder, chapter_index=0)
 
 @app.get("/read/{book_id}", response_class=HTMLResponse)
 async def redirect_to_first_chapter(book_id: str):
@@ -165,29 +132,6 @@ async def read_chapter(request: Request, book_id: str, chapter_index: int):
         "ai_conclusion": ai_conclusion,
         "paragraph_summaries": paragraph_summaries
     })
-
-@app.get("/api/book/{book_id}/info")
-async def get_book_info(book_id: str):
-    """Get book info (title, author, summary) for context."""
-    book = load_book_cached(book_id)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    content_sample = book.spine[0].content[:1000] if book.spine else ""
-    summary = get_book_summary(
-        book_id,
-        book.metadata.title,
-        ", ".join(book.metadata.authors),
-        content_sample
-    )
-
-    return {
-        "title": book.metadata.title,
-        "author": ", ".join(book.metadata.authors),
-        "summary": summary,
-        "chapters": len(book.spine)
-    }
-
 
 @app.get("/read/{book_id}/images/{image_name}")
 async def serve_image(book_id: str, image_name: str):
