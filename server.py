@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from reader3 import Book, BookMetadata, ChapterContent, TOCEntry
 from claude_code_detect import get_claude_code_status
+from book_info import get_book_summary
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -50,11 +51,21 @@ async def library_view(request: Request):
                 # Try to load it to get the title
                 book = load_book_cached(item)
                 if book:
+                    # Get first 1000 chars of content for summary
+                    content_sample = book.spine[0].content[:1000] if book.spine else ""
+                    summary = get_book_summary(
+                        item,
+                        book.metadata.title,
+                        ", ".join(book.metadata.authors),
+                        content_sample
+                    )
+
                     books.append({
                         "id": item,
                         "title": book.metadata.title,
                         "author": ", ".join(book.metadata.authors),
-                        "chapters": len(book.spine)
+                        "chapters": len(book.spine),
+                        "summary": summary
                     })
 
     return templates.TemplateResponse(
@@ -87,6 +98,15 @@ async def read_chapter(request: Request, book_id: str, chapter_index: int):
     prev_idx = chapter_index - 1 if chapter_index > 0 else None
     next_idx = chapter_index + 1 if chapter_index < len(book.spine) - 1 else None
 
+    # Get book summary for context
+    content_sample = book.spine[0].content[:1000] if book.spine else ""
+    summary = get_book_summary(
+        book_id,
+        book.metadata.title,
+        ", ".join(book.metadata.authors),
+        content_sample
+    )
+
     return templates.TemplateResponse("reader.html", {
         "request": request,
         "book": book,
@@ -95,7 +115,8 @@ async def read_chapter(request: Request, book_id: str, chapter_index: int):
         "book_id": book_id,
         "prev_idx": prev_idx,
         "next_idx": next_idx,
-        "claude_code_enabled": CLAUDE_CODE_STATUS["enabled"]
+        "claude_code_enabled": CLAUDE_CODE_STATUS["enabled"],
+        "book_summary": summary
     })
 
 @app.get("/read/{book_id}/images/{image_name}")

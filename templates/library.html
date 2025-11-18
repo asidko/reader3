@@ -12,9 +12,10 @@
         .badge { display: inline-flex; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 500; }
         .badge-dot { display: inline-block; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; margin-right: 6px; }
         .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-top: 30px; }
-        .book-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .book-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: transform 0.2s; display: flex; flex-direction: column; }
         .book-title { font-size: 1.2em; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
-        .book-meta { color: #666; font-size: 0.9em; margin-bottom: 15px; }
+        .book-meta { color: #666; font-size: 0.9em; margin-bottom: 10px; }
+        .book-summary { color: #555; font-size: 0.9em; margin-bottom: 15px; line-height: 1.5; flex-grow: 1; }
         .btn { display: inline-block; background: #3498db; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 0.9em; }
         .btn:hover { background: #2980b9; }
     </style>
@@ -43,6 +44,9 @@
                     {{ book.author }}<br>
                     {{ book.chapters }} sections
                 </div>
+                {% if book.summary %}
+                <div class="book-summary">{{ book.summary }}</div>
+                {% endif %}
                 <a href="/read/{{ book.id }}/0" class="btn">Read Book</a>
             </div>
             {% endfor %}
