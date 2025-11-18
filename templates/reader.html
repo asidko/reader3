@@ -103,14 +103,20 @@
     <!-- MAIN CONTENT -->
     <div id="main">
         <div class="content-container">
-            {% if book_summary %}
+            {% if ai_prephrase %}
             <div style="color: #888; font-size: 0.95em; line-height: 1.6; margin-bottom: 30px; font-style: italic; padding: 15px 0; border-bottom: 1px solid #eee;">
-                {{ book_summary }}
+                {{ ai_prephrase }}
             </div>
             {% endif %}
             <div class="book-content">
                 {{ current_chapter.content | safe }}
             </div>
+            {% if ai_conclusion %}
+            <div style="color: #888; font-size: 0.95em; line-height: 1.6; margin-top: 40px; padding: 15px 0; border-top: 1px solid #eee; font-style: italic;">
+                <div style="font-weight: bold; margin-bottom: 8px; color: #666;">Key Takeaway</div>
+                {{ ai_conclusion }}
+            </div>
+            {% endif %}
 
             <div class="chapter-nav">
                 {% if prev_idx is not none %}
