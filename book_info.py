@@ -1,16 +1,14 @@
 """
 Book info summarization module.
 
-Fetches compact one-paragraph summaries of books using Claude API.
+Fetches compact one-paragraph summaries of books using Claude CLI.
 Caches results for future requests.
 """
 
 import json
-import os
+import subprocess
 from pathlib import Path
 from typing import Optional
-
-import anthropic
 
 # Cache directory for book summaries
 CACHE_DIR = Path.home() / ".reader3_cache"
@@ -47,7 +45,7 @@ def _save_summary(book_id: str, summary: str) -> None:
 
 def get_book_summary(book_id: str, title: str, author: str, content_sample: str) -> str:
     """
-    Get or fetch a one-paragraph summary of a book.
+    Get or fetch a one-paragraph summary of a book using Claude CLI.
 
     Args:
         book_id: Unique identifier for the book (for caching)
@@ -56,25 +54,16 @@ def get_book_summary(book_id: str, title: str, author: str, content_sample: str)
         content_sample: First 1000 characters of book content
 
     Returns:
-        One-paragraph summary (2-3 sentences)
+        One-paragraph summary (3-4 sentences)
     """
     # Check cache first
     cached = _load_cached_summary(book_id)
     if cached:
         return cached
 
-    # Fetch from Claude
+    # Fetch from Claude CLI
     try:
-        # Use API key from environment if available
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""Write an engaging, intriguing one-paragraph summary of this book (3-4 sentences). The summary should:
+        prompt = f"""Write an engaging, intriguing one-paragraph summary of this book (3-4 sentences). The summary should:
 - Hook the reader with what makes the book interesting
 - Briefly describe the main plot/topic and protagonist
 - Hint at the core conflict or central theme
@@ -85,18 +74,29 @@ Book: {title} by {author}
 First 1000 characters:
 {content_sample}
 
-Provide only the summary, no other text.""",
-                }
-            ],
+Provide only the summary, no other text."""
+
+        result = subprocess.run(
+            ["claude", "-p", prompt],
+            capture_output=True,
+            text=True,
+            timeout=30
         )
 
-        summary = message.content[0].text.strip()
-        _save_summary(book_id, summary)
-        return summary
+        if result.returncode == 0:
+            summary = result.stdout.strip()
+            _save_summary(book_id, summary)
+            return summary
+        else:
+            # Claude CLI auth or error
+            error_msg = result.stderr.lower() if result.stderr else ""
+            if "auth" in error_msg or "unauthorized" in error_msg or "signed in" in error_msg:
+                return "Sign in to Claude Code CLI to enable book summaries"
+            return "Unable to generate summary"
 
+    except subprocess.TimeoutExpired:
+        return "Summarization timeout - try again later"
+    except FileNotFoundError:
+        return "Claude Code CLI not found"
     except Exception as e:
-        # Return user-friendly message if no API key
-        error_msg = str(e).lower()
-        if "auth" in error_msg or "api_key" in error_msg:
-            return "Set ANTHROPIC_API_KEY to see book summaries"
         return "Unable to generate summary"
