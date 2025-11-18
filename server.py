@@ -137,14 +137,38 @@ async def read_chapter(request: Request, book_id: str, chapter_index: int):
 async def serve_image(book_id: str, image_name: str):
     """
     Serves images specifically for a book.
-    The HTML contains <img src="images/pic.jpg">.
-    The browser resolves this to /read/{book_id}/images/pic.jpg.
+    Supports both structured paths and loose filenames.
     """
     # Security check: ensure book_id is clean
     safe_book_id = os.path.basename(book_id)
     safe_image_name = os.path.basename(image_name)
 
     img_path = os.path.join(BOOKS_DIR, safe_book_id, "images", safe_image_name)
+
+    if not os.path.exists(img_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return FileResponse(img_path)
+
+@app.get("/{image_name:path}")
+async def serve_any_image(image_name: str):
+    """
+    Catch-all for loose image filenames (e.g., from SVG xlink:href).
+    Only matches image extensions (.jpg, .png, .gif, .webp, .svg).
+    """
+    # Only serve image files
+    if not any(image_name.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg')):
+        raise HTTPException(status_code=404, detail="Not an image")
+
+    # Get current book
+    book_folder = _get_book_folder()
+    if not book_folder:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    # Security check
+    safe_image_name = os.path.basename(image_name)
+
+    img_path = os.path.join(BOOKS_DIR, book_folder, "images", safe_image_name)
 
     if not os.path.exists(img_path):
         raise HTTPException(status_code=404, detail="Image not found")
