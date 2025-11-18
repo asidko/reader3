@@ -5,12 +5,17 @@ Fetches compact summaries and AI context for books using Claude CLI.
 Caches results for future requests.
 """
 
+import asyncio
 import hashlib
 import json
 import re
 import subprocess
 from pathlib import Path
 from typing import Optional
+
+# Precompile regex patterns for performance
+_PARAGRAPH_PATTERN = re.compile(r'<p[^>]*>(.*?)</p>', re.DOTALL)
+_HTML_TAG_PATTERN = re.compile(r'<[^>]+>')
 
 # Cache directory for book summaries
 CACHE_DIR = Path.home() / ".reader3_cache"
@@ -209,3 +214,145 @@ Provide ONLY the summary, no other text."""
         _save_summary(book_id, result)
         return result
     return "Unable to generate summary"
+
+
+def _split_into_paragraph_groups(content: str, min_length: int = 500, max_groups: int = 10) -> list[str]:
+    """Split HTML into groups with guaranteed minimum length, capped at max_groups.
+
+    Args:
+        content: HTML chapter content
+        min_length: Minimum characters per group (hard floor)
+        max_groups: Maximum number of groups to create (cap LLM requests)
+
+    Returns:
+        List of group HTML strings
+    """
+    p_matches = list(_PARAGRAPH_PATTERN.finditer(content))
+    if not p_matches:
+        return [content.strip()] if content.strip() else []
+
+    # Extract and filter non-empty paragraphs
+    paragraphs = []
+    for match in p_matches:
+        clean = _HTML_TAG_PATTERN.sub('', match.group(1)).strip()
+        if clean:
+            paragraphs.append(match.group(0))
+
+    if not paragraphs:
+        return []
+
+    # Calculate total content and target group length
+    total_length = sum(len(_HTML_TAG_PATTERN.sub('', p)) for p in paragraphs)
+    target_length = max(min_length, total_length // max_groups)
+
+    # Group paragraphs to meet target length
+    groups = []
+    current_group = []
+    current_length = 0
+
+    for para_html in paragraphs:
+        para_length = len(_HTML_TAG_PATTERN.sub('', para_html))
+        current_group.append(para_html)
+        current_length += para_length
+
+        # Flush when we hit target length and haven't hit max groups yet
+        if (current_length >= target_length and len(groups) < max_groups - 1) or current_length >= target_length * 1.5:
+            groups.append('\n'.join(current_group))
+            current_group = []
+            current_length = 0
+
+    # Add remaining paragraphs to last group
+    if current_group:
+        groups.append('\n'.join(current_group))
+
+    return groups[:max_groups]
+
+
+def _get_paragraph_group_summary(group_text: str, book_title: str = "", book_author: str = "") -> Optional[str]:
+    """Get an intriguing 2-4 word teaser for a paragraph group (shown before reading).
+
+    Args:
+        group_text: HTML text to summarize
+        book_title: Book title for context
+        book_author: Book author for context
+    """
+    # Clean HTML and strip
+    clean_text = _HTML_TAG_PATTERN.sub('', group_text).strip()
+
+    if not clean_text or len(clean_text) < 20:
+        return None
+
+    # Generate cache key from content hash
+    content_hash = hashlib.md5(clean_text[:200].encode()).hexdigest()[:8]
+    cache_key = f"para_summary_{content_hash}"
+
+    # Check cache
+    cached = _load_cached_summary(cache_key)
+    if cached:
+        return cached
+
+    # Build context string
+    context = ""
+    if book_title and book_author:
+        context = f"Book: {book_title} by {book_author}\n\n"
+    elif book_title:
+        context = f"Book: {book_title}\n\n"
+    elif book_author:
+        context = f"Book by {book_author}\n\n"
+
+    # Build prompt for intriguing teaser
+    prompt = f"""Create an intriguing 2-4 word teaser that makes someone curious to read this section.
+Use vivid verbs, tension, or mystery. Make it a hook, not just a summary.
+No punctuation. Just key words.
+
+{context}Passage:
+{clean_text[:400]}
+
+ONLY the 2-4 words, nothing else."""
+
+    result = _fetch_from_claude(prompt)
+    if result:
+        _save_summary(cache_key, result)
+        return result
+
+    return None
+
+
+async def get_paragraph_summaries(
+    content: str,
+    book_title: str = "",
+    book_author: str = ""
+) -> dict[int, str]:
+    """Get summaries for all paragraph groups in parallel.
+
+    Args:
+        content: HTML chapter content
+        book_title: Book title for context
+        book_author: Book author for context
+
+    Returns:
+        Dict mapping group index to summary text (max 10 groups)
+    """
+    groups = _split_into_paragraph_groups(content)
+
+    if not groups:
+        return {}
+
+    # Create tasks with book context
+    async def get_summary(i: int, group_text: str) -> tuple[int, Optional[str]]:
+        result = await asyncio.to_thread(
+            _get_paragraph_group_summary,
+            group_text,
+            book_title,
+            book_author
+        )
+        return (i, result)
+
+    # Run all summaries in true parallel using gather
+    results = await asyncio.gather(*[
+        get_summary(i, group_text)
+        for i, group_text in enumerate(groups)
+    ])
+
+    # Build result dict, filtering None values
+    return {i: summary for i, summary in results if summary}

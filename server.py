@@ -10,7 +10,12 @@ from fastapi.templating import Jinja2Templates
 
 from reader3 import Book, BookMetadata, ChapterContent, TOCEntry
 from claude_code_detect import get_claude_code_status
-from book_info import get_book_summary, get_ai_prephrase, get_ai_conclusion
+from book_info import (
+    get_book_summary,
+    get_ai_prephrase,
+    get_ai_conclusion,
+    get_paragraph_summaries,
+)
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -127,6 +132,13 @@ async def read_chapter(request: Request, book_id: str, chapter_index: int):
         summary
     )
 
+    # Get paragraph summaries in parallel with book context
+    paragraph_summaries = await get_paragraph_summaries(
+        current_chapter.content,
+        book.metadata.title,
+        ", ".join(book.metadata.authors)
+    )
+
     return templates.TemplateResponse("reader.html", {
         "request": request,
         "book": book,
@@ -138,7 +150,8 @@ async def read_chapter(request: Request, book_id: str, chapter_index: int):
         "claude_code_enabled": CLAUDE_CODE_STATUS["enabled"],
         "book_summary": summary,
         "ai_prephrase": ai_prephrase,
-        "ai_conclusion": ai_conclusion
+        "ai_conclusion": ai_conclusion,
+        "paragraph_summaries": paragraph_summaries
     })
 
 @app.get("/api/book/{book_id}/info")

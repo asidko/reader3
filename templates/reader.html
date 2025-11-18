@@ -108,7 +108,7 @@
                 {{ ai_prephrase }}
             </div>
             {% endif %}
-            <div class="book-content">
+            <div class="book-content" id="content">
                 {{ current_chapter.content | safe }}
             </div>
             {% if ai_conclusion %}
@@ -175,6 +175,44 @@
                 summary: document.body.dataset.bookSummary
             };
         };
+
+        // Inject intriguing teasers before paragraph groups
+        const paragraphSummaries = {{ paragraph_summaries | tojson }};
+        if (Object.keys(paragraphSummaries).length > 0) {
+            const contentDiv = document.getElementById('content');
+            const paragraphs = contentDiv.querySelectorAll('p');
+            let groupIndex = 0;
+            let currentGroupSize = 0;
+            let firstParaOfGroup = true;
+
+            for (let i = 0; i < paragraphs.length; i++) {
+                const para = paragraphs[i];
+                const text = para.textContent || '';
+                currentGroupSize += text.length;
+
+                // Insert teaser before first paragraph of group
+                if (firstParaOfGroup && groupIndex in paragraphSummaries) {
+                    const teaserDiv = document.createElement('div');
+                    teaserDiv.style.color = '#999';
+                    teaserDiv.style.fontSize = '0.95em';
+                    teaserDiv.style.fontStyle = 'italic';
+                    teaserDiv.style.fontWeight = '500';
+                    teaserDiv.style.margin = '20px 0 10px 0';
+                    teaserDiv.style.paddingLeft = '15px';
+                    teaserDiv.style.borderLeft = '3px solid #d63384';
+                    teaserDiv.textContent = '✦ ' + paragraphSummaries[groupIndex];
+                    para.parentNode.insertBefore(teaserDiv, para);
+                    firstParaOfGroup = false;
+                }
+
+                // Check if this is the last paragraph of a group
+                if ((currentGroupSize > 500 && i > 0) || i === paragraphs.length - 1) {
+                    groupIndex++;
+                    currentGroupSize = 0;
+                    firstParaOfGroup = true;
+                }
+            }
+        }
     </script>
 </body>
 </html>
