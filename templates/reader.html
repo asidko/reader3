@@ -103,10 +103,9 @@
     <!-- MAIN CONTENT -->
     <div id="main">
         <div class="content-container">
-            {% if book_summary and chapter_index == 0 %}
-            <div style="background: #f0f4ff; padding: 15px; border-radius: 6px; margin-bottom: 30px; border-left: 4px solid #667eea;">
-                <div style="font-weight: bold; color: #333; margin-bottom: 8px;">About this book</div>
-                <div style="color: #555; font-size: 0.95em; line-height: 1.6;">{{ book_summary }}</div>
+            {% if book_summary %}
+            <div style="color: #888; font-size: 0.95em; line-height: 1.6; margin-bottom: 30px; font-style: italic; padding: 15px 0; border-bottom: 1px solid #eee;">
+                {{ book_summary }}
             </div>
             {% endif %}
             <div class="book-content">
