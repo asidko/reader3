@@ -11,7 +11,7 @@ This project was 90% vibe coded just to illustrate how one can very easily [read
 The easiest way to use the reader:
 
 ```bash
-python book.py alice.epub
+ uv run book.py alice.epub
 ```
 
 This will:
